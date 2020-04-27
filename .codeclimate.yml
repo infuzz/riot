@@ -1,15 +1,11 @@
-engines:
-  eslint:
-    enabled: true
-
 ratings:
   paths:
-  - "lib/**.js"
+  - "src/**.js"
 
-exclude_patterns:
+exclude_paths:
   - "riot+compiler.js"
   - "riot+compiler.min.js"
-  - "riot.csp.js"
   - "riot.js"
+  - "riot.esm.js"
   - "riot.min.js"
   - "test/**"

@@ -12,62 +12,49 @@ MINOR_VERSION = `echo $(VERSION) | sed 's/\.[^.]*$$//'`
 KARMA = ./node_modules/karma/bin/karma
 ESLINT = ./node_modules/eslint/bin/eslint.js
 MOCHA = ./node_modules/mocha/bin/_mocha
-SMASH = ./node_modules/.bin/smash
 ROLLUP = ./node_modules/.bin/rollup
-UGLIFY = ./node_modules/uglify-js/bin/uglifyjs
+MINIFY = ./node_modules/.bin/terser
 COVERALLS = ./node_modules/coveralls/bin/coveralls.js
 RIOT_CLI = ./node_modules/.bin/riot
-CHOKIDAR = ./node_modules/.bin/chokidar
+TSC = ./node_modules/.bin/tsc
 
 # folders
 DIST = dist/riot/
-LIB = lib/
+SRC = src
 CONFIG = config/
 
 GENERATED_FILES = riot.js riot+compiler.js
 
+test: eslint test-karma test-typing
 
-test: eslint test-mocha test-karma
+test-karma:
+	@ $(KARMA) start test/karma.conf.js
 
 eslint:
 	# check code style
-	@ $(ESLINT) -c ./.eslintrc.json lib test
-
-test-mocha:
-	RIOT=../../dist/riot/riot.js $(MOCHA) -- test/specs/server
-
-tags:
-	@ $(RIOT_CLI) --silent test/tag dist/tags.js
-
-test-karma:
-  # Test riot+compiler.js
-	@ TEST_FOLDER=browser/compiler $(KARMA) start test/karma.conf.js
-	# Test only riot.js and generate the coverage
-	@ TEST_FOLDER=browser/riot $(KARMA) start test/karma.conf.js
+	@ $(ESLINT) -c ./.eslintrc src test
 
 test-coveralls:
 	@ RIOT_COV=1 cat ./coverage/report-lcov/lcov.info | $(COVERALLS)
+
+test-debug:
+	@ ${KARMA} start test/karma.conf.js --browsers=Chrome --no-single-run --watch
 
 test-sauce:
 	# run the riot tests on saucelabs
 	@ SAUCELABS=1 make test-karma
 
-test-chrome:
-	@ DEBUG=1 TEST_FOLDER=browser/riot ${KARMA} start test/karma.conf.js --browsers=Chrome --no-single-run --watch
-
-compare:
-	# compare the current release with the previous one
-	du -h riot.min.js riot+compiler.min.js
-	du -h dist/riot/riot.min.js dist/riot/riot+compiler.min.js
+test-typing:
+	# silent compile typescript
+	@ $(TSC) -p ./test
 
 raw:
 	# build riot
 	@ mkdir -p $(DIST)
 	# Default builds UMD
-	@ $(ROLLUP) lib/riot.js --config $(CONFIG)rollup.config.js > $(DIST)riot.js
-	@ $(ROLLUP) lib/riot+compiler.js --config $(CONFIG)rollup.config.js > $(DIST)riot+compiler.js
-	# Chrome Security Policy build
-	@ $(ROLLUP) lib/riot.js --config $(CONFIG)rollup.config.csp.js > $(DIST)riot.csp.js
+	@ $(ROLLUP) src/riot.js --format umd --config rollup.config.js > $(DIST)riot.js
+	@ $(ROLLUP) src/riot+compiler.js --format umd --config rollup.config.js > $(DIST)riot+compiler.js
+	@ $(ROLLUP) src/riot.js --format esm --config rollup.config.js > $(DIST)riot.esm.js
 
 clean:
 	# clean $(DIST)
@@ -77,28 +64,18 @@ riot: clean raw test
 
 min:
 	# minify riot
-	@ for f in $(GENERATED_FILES); do \
-		$(UGLIFY) $(DIST)$$f \
+	@ $(MINIFY) $(DIST)riot.js \
 			--comments \
 			--toplevel \
 			--mangle \
 			--compress  \
-			-o $(DIST)$${f%.*}.min.js; \
-		done
-
-perf: riot
-	# run the performance tests
-	@ node test/performance/benchmarks ../riot.2.6.1 --expose-gc
-	@ node test/performance/benchmarks ../../../riot --expose-gc
-	@ node test/performance/benchmarks ../../../dist/riot/riot --expose-gc
-
-perf-leaks: riot
-	# detect memory leaks
-	@ node --expose-gc test/performance/memory
-
-watch:
-	# watch and rebuild riot and its testswatch:
-	@ $(CHOKIDAR) lib -c 'make raw & make tags'
+			-o $(DIST)riot.min.js;
+	# minify the riot+compiler
+	@ $(MINIFY) $(DIST)riot+compiler.js \
+			--comments \
+			--toplevel \
+			--mangle \
+			-o $(DIST)riot+compiler.min.js;
 
 build:
 	# generate riot.js & riot.min.js
@@ -112,9 +89,7 @@ bump:
 	# grab all latest changes to master
 	# (if there's any uncommited changes, it will stop here)
 	# bump version in *.json files
-	@ mv package-lock.json package-lock.tmp
-	@ sed -i '' 's/\("version": "\)[^"]*/\1'$(VERSION)'/' *.json
-	@ mv package-lock.tmp package-lock.json
+	@ sed -i '' 's/\("version": "\)[^"]*/\1'$(VERSION)'/' package.json
 	@ make build
 	@ git status --short
 
@@ -143,13 +118,11 @@ version-undo:
 	@ git reset HEAD^
 	@ git log --oneline -2
 
-
-release: bump version
+release: riot min bump version
 
 release-undo:
 	make version-undo
 	make bump-undo
-
 
 publish:
 	# push new version to npm and github
@@ -158,4 +131,4 @@ publish:
 	@ git push origin master
 	@ git push origin master --tags
 
-.PHONY: test min eslint test-mocha test-compiler test-coveralls test-sauce compare raw riot perf watch tags perf-leaks build bump bump-undo version version-undo release-undo publish
+.PHONY: test min eslint test-coveralls test-sauce raw riot build bump bump-undo version version-undo release-undo publish

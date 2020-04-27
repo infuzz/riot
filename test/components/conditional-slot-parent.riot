@@ -1,0 +1,18 @@
+<conditional-slot-parent>
+  <conditional-slot is-visible={state.mustShowSlot}>
+    <p>Hello there</p>
+    <b if={state.mustShowSlot}>I am visible</b>
+  </conditional-slot>
+
+  <script>
+    import ConditionalSlot from './conditional-slot.riot'
+    export default {
+      state: {
+        mustShowSlot: false
+      },
+      components: {
+        ConditionalSlot
+      }
+    }
+  </script>
+</conditional-slot-parent>
